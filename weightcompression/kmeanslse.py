@@ -49,7 +49,7 @@ def train_step(
     optimizer # Optimizer, from torch.optim.
   ):
   output = model(points)
-  loss = torch.norm(output)
+  loss = torch.mean(output ** 2)
   optimizer.zero_grad()
   loss.backward()
   optimizer.step()
