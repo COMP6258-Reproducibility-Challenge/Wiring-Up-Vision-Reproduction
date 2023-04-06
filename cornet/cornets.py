@@ -104,9 +104,12 @@ class CORnetSOther(nn.Module):
     )
     # A different batch normalization needs to be performed on each
     # recurrence.
-    self.batchnorm1 = [
-      nn.BatchNorm2d(channels_scaled) for _ in range(self.recurrences)
-    ]
+    for recurrence in range(self.recurrences):
+      setattr(
+        self,
+        "batchnorm1_%d" % recurrence,
+        nn.BatchNorm2d(channels_scaled)
+      )
     self.activation1 = nn.ReLU(inplace = True)
 
     self.conv2 = nn.Conv2d(
@@ -116,9 +119,12 @@ class CORnetSOther(nn.Module):
       padding = 1,
       bias = False
     )
-    self.batchnorm2 = [
-      nn.BatchNorm2d(channels_scaled) for _ in range(self.recurrences)
-    ]
+    for recurrence in range(self.recurrences):
+      setattr(
+        self,
+        "batchnorm2_%d" % recurrence,
+        nn.BatchNorm2d(channels_scaled)
+      )
     self.activation2 = nn.ReLU(inplace = True)
 
     self.conv3 = nn.Conv2d(
@@ -126,9 +132,12 @@ class CORnetSOther(nn.Module):
       kernel_size = (1, 1),
       bias = False
     )
-    self.batchnorm3 = [
-      nn.BatchNorm2d(channels_scaled) for _ in range(self.recurrences)
-    ]
+    for recurrence in range(self.recurrences):
+      setattr(
+        self,
+        "batchnorm3_%d" % recurrence,
+        nn.BatchNorm2d(self.channels_output)
+      )
 
     # Skip connection needs to downsample.
     self.conv_skip = nn.Conv2d(
@@ -151,16 +160,16 @@ class CORnetSOther(nn.Module):
       skip = x if recurrence > 0 else self.batchnorm_skip(self.conv_skip(x))
 
       x = self.conv1(x)
-      x = self.batchnorm1[recurrence](x)
+      x = getattr(self, "batchnorm1_%d" % recurrence)(x)
       x = self.activation1(x)
 
       self.conv2.stride = (1, 1) if recurrence > 0 else (2, 2)
       x = self.conv2(x)
-      x = self.batchnorm2[recurrence](x)
+      x = getattr(self, "batchnorm2_%d" % recurrence)(x)
       x = self.activation2(x)
 
       x = self.conv3(x)
-      x = self.batchnorm3[recurrence](x)
+      x = getattr(self, "batchnorm3_%d" % recurrence)(x)
       
       x = x + skip
       x = self.activation_final(x)
