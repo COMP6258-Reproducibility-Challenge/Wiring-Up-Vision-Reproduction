@@ -173,8 +173,9 @@ class CORnetSOther(nn.Module):
       
       x = x + skip
       x = self.activation_final(x)
+      final = self.final(x)
       
-    return self.final(x)
+    return final
   
   def initialize(self):
     for module in self.modules():
@@ -185,7 +186,7 @@ class CORnetSOther(nn.Module):
         nn.init.constant_(module.bias,   0)
   
 # Aliases.
-CORnetSV2 = CORnetSV3 = CORnetSIT = CORnetSOther
+CORnetSV2 = CORnetSV4 = CORnetSIT = CORnetSOther
 
 # Full module as specified by [1].
 class CORnetS(nn.Module):
@@ -193,54 +194,54 @@ class CORnetS(nn.Module):
   def __init__(self,
       channels_input = 3,
       classes_output = 1000,
-      v1_channels    = 64,
-      v2_channels    = 128,
-      v3_channels    = 256,
-      it_channels    = 512,
-      v2_recurrences = 2,
-      v3_recurrences = 4,
-      it_recurrences = 2
+      V1_channels    = 64,
+      V2_channels    = 128,
+      V4_channels    = 256,
+      IT_channels    = 512,
+      V2_recurrences = 2,
+      V4_recurrences = 4,
+      IT_recurrences = 2
     ):
     super(CORnetS, self).__init__()
 
     self.channels_input = channels_input
     self.classes_output = classes_output
-    self.v1_channels    = v1_channels
-    self.v2_channels    = v2_channels
-    self.v3_channels    = v3_channels
-    self.it_channels    = it_channels
-    self.v2_recurrences = v2_recurrences
-    self.v3_recurrences = v3_recurrences
-    self.it_recurrences = it_recurrences
+    self.V1_channels    = V1_channels
+    self.V2_channels    = V2_channels
+    self.V4_channels    = V4_channels
+    self.IT_channels    = IT_channels
+    self.V2_recurrences = V2_recurrences
+    self.V4_recurrences = V4_recurrences
+    self.IT_recurrences = IT_recurrences
 
-    self.v1 = CORnetSV1(self.channels_input, self.v1_channels)
-    self.v2 = CORnetSV2(
-      self.v1_channels, self.v2_channels,
-      self.v2_recurrences
+    self.V1 = CORnetSV1(self.channels_input, self.V1_channels)
+    self.V2 = CORnetSV2(
+      self.V1_channels, self.V2_channels,
+      self.V2_recurrences
     )
-    self.v3 = CORnetSV3(
-      self.v2_channels, self.v3_channels,
-      self.v3_recurrences
+    self.V4 = CORnetSV4(
+      self.V2_channels, self.V4_channels,
+      self.V4_recurrences
     )
-    self.it = CORnetSIT(
-      self.v3_channels, self.it_channels,
-      self.it_recurrences
+    self.IT = CORnetSIT(
+      self.V4_channels, self.IT_channels,
+      self.IT_recurrences
     )
 
     # Final block to get classes.
     self.average_pool = nn.AdaptiveAvgPool2d(1)
     self.flatten      = nn.Flatten()
-    self.linear       = nn.Linear(self.it_channels, self.classes_output)
+    self.linear       = nn.Linear(self.IT_channels, self.classes_output)
 
     self.final = nn.Identity()
 
   def forward(self,
       inp
     ):
-    x = self.v1(inp)
-    x = self.v2(x)
-    x = self.v3(x)
-    x = self.it(x)
+    x = self.V1(inp)
+    x = self.V2(x)
+    x = self.V4(x)
+    x = self.IT(x)
 
     x = self.average_pool(x)
     x = self.flatten(x)
@@ -249,13 +250,33 @@ class CORnetS(nn.Module):
     return self.final(x)
   
   def initialize(self):
-    self.v1.initialize()
-    self.v2.initialize()
-    self.v3.initialize()
-    self.it.initialize()
+    self.V1.initialize()
+    self.V2.initialize()
+    self.V4.initialize()
+    self.IT.initialize()
     nn.init.xavier_normal_(self.linear.weight)
     nn.init.constant_(self.linear.bias, 0)
-    
+   
+# This replaces any OLD checkpoint state dictionaries with the new format.
+# (For anyone wondering, the previous version of this code gave some
+# values the wrong names).
+REPLACEMENTS = {
+  "v1": "V1",
+  "v2": "V2",
+  "v3": "V4",
+  "it": "IT"
+}
+def update_model_state_dict(
+    model_state_dict
+  ):
+  keys_to_change = []
+  for key in model_state_dict:
+    for replace_key in REPLACEMENTS:
+      if key.startswith(replace_key):
+        replacement = key.replace(replace_key, REPLACEMENTS[replace_key], 1)
+        keys_to_change.append((replacement, key))
+  for (replacement, key) in keys_to_change:
+    model_state_dict[replacement] = model_state_dict.pop(key)
 
 # REFERENCES:
 # [1]
