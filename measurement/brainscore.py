@@ -10,7 +10,7 @@ from brainio.assemblies import merge_data_arrays, NeuroidAssembly, walk_coords
 from brainscore import score_model as score_model_function
 from brainscore.submission.utils import UniqueKeyDict
 from brainscore.utils import LazyLoad
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from model_tools.activations.core import ActivationsExtractorHelper
 from model_tools.activations.pytorch import PytorchWrapper, \
                                             load_preprocess_images
@@ -70,7 +70,7 @@ class CORnetSModelCommitment(ModelCommitment):
       number_of_trials = 1
     ):
     if self.do_behavior:
-      return super(CORnetCommitment, self).look_at(
+      return super(CORnetSModelCommitment, self).look_at(
         stimuli,
         number_of_trials = number_of_trials
       )
@@ -234,7 +234,7 @@ class TemporalExtractor(ActivationsExtractorHelper):
     )
     regions = defaultdict(list)
     for layer in set(raw_activations["layer"].values):
-      match = re.match(r"(([^-]*)\..*|logits|avgpool)-t([0-9]+)", layer)
+      match = re.match(r"(([^-]*)\..*|logits|average_pool)-t([0-9]+)", layer)
       region, timestep = match.group(2) if match.group(2) \
                                         else match.group(1), match.group(3)
       stripped_layer = match.group(1)
@@ -265,17 +265,17 @@ class TemporalExtractor(ActivationsExtractorHelper):
         },
         dims = ["time_step"] + list(key_activations.dims)
       )
-      activations = list(activations.values())
-      activations = merge_data_arrays(activations)
-      neuroid_id = [
-        ".".join([f"{value}" for value in values])
-        for values in zip(
-          *[activations[coord].values
-          for coord in ["model", "region", "neuroid_num"]]
-        )
-      ]
-      activations["neuroid_id"] = ("neuroid", neuroid_id)
-      return activations
+    activations = list(activations.values())
+    activations = merge_data_arrays(activations)
+    neuroid_id = [
+      ".".join([f"{value}" for value in values])
+      for values in zip(
+        *[activations[coord].values
+        for coord in ["model", "region", "neuroid_num"]]
+      )
+    ]
+    activations["neuroid_id"] = ("neuroid", neuroid_id)
+    return activations
 
 # Finds the nearest item in an array to a specified value by absolute
 # difference.
@@ -290,21 +290,22 @@ def find_nearest(
 def brain_model(
     model,
     image_size    = 224,
-    separate_time = True
+    separate_time = True,
+    identifier    = "CORnet-S"
   ):
   preprocessing = functools.partial(
     load_preprocess_images,
     image_size = image_size
   )
   wrapper = TemporalPytorchWrapper(
-    identifier    = "CORnet-S",
+    identifier    = identifier,
     model         = model,
     preprocessing = preprocessing,
     separate_time = separate_time
   )
   wrapper.image_size = image_size
   return CORnetSModelCommitment(
-    identifier = "CORnet-S",
+    identifier = identifier,
     activations_model = wrapper,
     layers = ["V1.final-t0"] + [
       f"{area}.final-t{timestep}"
@@ -319,10 +320,11 @@ def brain_model(
 
 def score(
     brain_model,
-    benchmark
+    benchmark,
+    identifier = "CORnet-S"
   ):
   result = score_model_function(
-    model_identifier     = "CORnet-S",
+    model_identifier     = identifier,
     benchmark_identifier = benchmark,
     model                = brain_model
   )
@@ -330,12 +332,33 @@ def score(
 
 def score_benchmarks(
     brain_model,
-    *benchmarks
+    benchmarks,
+    identifier = "CORnet-S"
   ):
   scores = OrderedDict()
   for benchmark in benchmarks:
-    scores[benchmark] = score(brain_model, benchmark)
+    scores[benchmark] = score(
+      brain_model,
+      benchmark,
+      identifier = identifier
+    )
   return scores
+
+def score_public_benchmarks(
+    brain_model,
+    identifier = "CORnet-S"
+  ):
+  return score_benchmarks(
+    brain_model,
+    [
+      "movshon.FreemanZiemba2013public.V1-pls",
+      "movshon.FreemanZiemba2013public.V2-pls",
+      "dicarlo.MajajHong2015public.V4-pls",
+      "dicarlo.MajajHong2015public.IT-pls",
+      "dicarlo.Rajalingham2018public-i2n"
+    ],
+    identifier = identifier
+  )
 
 # SOURCES:
 # <1>
