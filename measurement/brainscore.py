@@ -360,6 +360,25 @@ def score_public_benchmarks(
     identifier = identifier
   )
 
+# Takes a set of scores and calculates a mean score.
+# Specifically, it returns a raw mean, an adjusted mean (by the uncertainty)
+# and the uncertainty of the mean.
+def mean_score(
+    scores
+  ):
+  centers = np.array([
+    scores[x].sel(aggregation = "center").to_numpy() for x in scores
+  ])
+  errors = np.array([
+    scores[x].sel(aggregation = "error").to_numpy() for x in scores
+  ])
+  sum_inv_var      = np.sum(1 / np.square(errors))
+  adj_centers_mean = np.sum(centers / np.square(errors)) / sum_inv_var
+  adj_errors_mean  = 1 / np.sqrt(sum_inv_var)
+  raw_centers_mean = np.mean(centers)
+  return (raw_centers_mean, adj_centers_mean, adj_errors_mean)
+  
+
 # SOURCES:
 # <1>
 #     Code has been adapted and inspired from:
