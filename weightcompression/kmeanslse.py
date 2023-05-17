@@ -45,6 +45,9 @@ class KMeansLSE(torch.nn.Module):
     )
     return torch.abs(lse / self.beta)
 
+  def get_parameters(self):
+    return self.centroids.clone().detach()
+
 def cluster_train_step(
     model,              # k-Means model.
     points,             # NxD matrix. N data points in D dimensions.
