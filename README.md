@@ -7,6 +7,12 @@ Reproduction and review by Kanishk Gandhi, Jay Hill, and Anjali Nandi. Universit
 
 ## Notes
 Most of the code here was run in interactive mode by importing the scripts contained here, including into Jupyter Notebooks.
+### Datasets
+ImageNet:
+https://www.image-net.org/
+
+ImageNetMini:
+https://www.kaggle.com/datasets/ifigotin/imagenetmini-1000
 
 ## Extra
 Some models took *very* long to train.
