@@ -7,46 +7,77 @@ from weightcompression.kmeanslse import *
 
 from sklearn.cluster import KMeans
 import torch
+import numpy as np
 
-
-class KernelCluster():
-
-  def __init__(self,
-      n_clusters # Number of clusters, k.
-    ):
-    self.n_clusters = n_clusters
-    self.parameters = None
-    self.closest    = None
-
-  def get_clusters_from_weights(self,
-      kernel_weights,
-      iterations = 300
-    ):
-    k1 = torch.squeeze(kernel_weights)
-    k2 = k1.reshape(k1.shape[0],  k1.shape[1], -1)
-    k3 = k2.reshape(k2.shape[0] * k2.shape[1], -1)
-    kmeans = KMeans(
-      n_clusters   = self.n_clusters,
-      n_init       = "auto",
-      random_state = 42,
-      max_iter     = iterations
+# Clusters the convolutional layers of a CORnet-S model.
+def cluster_kernels(cornet):
+  # Predefined locations of layers and their cluster sizes.
+  layer_dict = {
+    "V1.conv2"    : (cornet.V1.conv2,     7),
+    "V2.conv0"    : (cornet.V2.conv0,     4),
+    "V2.conv1"    : (cornet.V2.conv1,     5),
+    "V2.conv2"    : (cornet.V2.conv2,     7),
+    "V2.conv3"    : (cornet.V2.conv3,     5),
+    "V2.conv_skip": (cornet.V2.conv_skip, 4),
+    "V4.conv0"    : (cornet.V4.conv0,     4),
+    "V4.conv1"    : (cornet.V4.conv1,     5),
+    "V4.conv2"    : (cornet.V4.conv2,     9),
+    "V4.conv3"    : (cornet.V4.conv3,     5),
+    "V4.conv_skip": (cornet.V4.conv_skip, 5),
+    "IT.conv0"    : (cornet.IT.conv0,     4),
+    "IT.conv1"    : (cornet.IT.conv1,     4),
+    "IT.conv2"    : (cornet.IT.conv2,     7),
+    "IT.conv3"    : (cornet.IT.conv3,     5),
+    "IT.conv_skip": (cornet.IT.conv_skip, 4)
+  }
+  cluster_info = {}
+  for name in layer_dict:
+    print("Clustering %s..." % name)
+    cluster_info[name] = {"type": "conv"}
+    # Weight adjustment.
+    kernel_weights = layer_dict[name][0].weight.clone().detach()
+    kernel_weights.requires_grad = False
+    kernel_weights = torch.squeeze(kernel_weights)
+    weight_matrix = kernel_weights.reshape(
+      kernel_weights.shape[0],
+      kernel_weights.shape[1],
+      -1
     )
-    kmeans.fit(k3.detach().numpy())
-    self.parameters = kmeans.cluster_centers_
-    self.closest    = kmeans.labels_
-    return kmeans.inertia_
-
-  def perform_elbow(self,
-      kernel_weights,
-      min_clusters =  1,
-      max_clusters = 10,
-      repeats      =  1
-    ):
-    losses = []
-    for n_clusters in range(min_clusters, max_clusters):
-      self.n_clusters = n_clusters
-      loss = self.get_clusters_from_weights(
-        kernel_weights
-      )
-      losses.append(loss)
-    return losses
+    weight_matrix = weight_matrix.reshape(
+      weight_matrix.shape[0] * weight_matrix.shape[1],
+      -1
+    ).detach().numpy()
+    # Clustering.
+    kmeans = KMeans(
+      n_clusters   = layer_dict[name][1],
+      n_init       = "auto",
+      random_state = 42
+    )
+    kmeans.fit(weight_matrix)
+    cluster_info[name]["centroids"] = torch.tensor(kmeans.cluster_centers_)
+    # Frequency of clusters.
+    total_cluster = np.max(kmeans.labels_) + 1
+    freqs = {x: [] for x in range(total_cluster)}
+    labels_reshape = kmeans.labels_.reshape(
+      kernel_weights.shape[0],
+      kernel_weights.shape[1]
+    )
+    for closest_cluster in labels_reshape:
+      bins = np.bincount(closest_cluster, minlength = total_cluster)
+      for idx, bincount in enumerate(bins):
+        freqs[idx] += [bincount]
+    cluster_stats = np.array(
+      [[np.mean(freqs[x]), np.std(freqs[x])] for x in freqs]
+    )
+    cluster_info[name]["cluster-stats"] = torch.tensor(cluster_stats)
+    # Distribution of kernel weights.
+    sigmas = {x: [] for x in range(total_cluster)}
+    stds = np.std(
+      weight_matrix - kmeans.cluster_centers_[kmeans.labels_],
+      axis = 1
+    )
+    for idx, std in enumerate(stds):
+      sigmas[kmeans.labels_[idx]] += [std]
+    weights_stats = np.array([np.mean(sigmas[x]) for x in sigmas])
+    cluster_info[name]["weights-stats"] = torch.tensor(weights_stats)
+  return cluster_info

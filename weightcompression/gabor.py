@@ -23,16 +23,14 @@ class Gabor(torch.nn.Module):
     )
     self.freq = torch.nn.parameter.Parameter(
       torch.normal(
-        3,
-        0.5,
+        3, 0.5,
         size = (self.n_kernels, 1, 1),
         dtype = torch.float32
       )
     )
     self.phi = torch.nn.parameter.Parameter(
       torch.normal(
-        0,
-        1,
+        0, 1,
         size = (self.n_kernels, 1, 1),
         dtype = torch.float32
       )
@@ -70,8 +68,13 @@ class Gabor(torch.nn.Module):
 
     final = exp_scale * exp_part * cos_part * self.C
     return final
+  
+  def get_parameters(self):
+    return torch.stack(
+      [param.detach()[:, 0, 0] for param in self.parameters()]
+    )
 
-def train_step(
+def gabor_train_step(
     model,          # Gabor model.
     kernel_weights, # Kernel weights from 2D convolution.
     optimizer       # Optimizer.
@@ -97,7 +100,7 @@ def fit_gabor(
   if optimizer is None:
     optimizer = torch.optim.SGD(gabor.parameters(), lr = 10.0)
   for i in range(iterations):
-    loss = train_step(gabor, kernel_weights, optimizer)
+    loss = gabor_train_step(gabor, kernel_weights, optimizer)
     if verbose:
       print("\rIter. ", i, ": Loss. ", loss, sep = "", end = "")
   if verbose:
@@ -128,16 +131,3 @@ def fit_gabors(
     )
     gabors[index] = gabor
   return gabors
-
-# TEST
-
-#cornet = CORnetS()
-#checkpoint = torch.load(
-#  "cornet/checkpointfinal.tar",
-#  map_location = torch.device("cpu")
-#)
-#cornet.load_state_dict(checkpoint["model_state_dict"])
-#cornet.eval()
-#cornet.V1.conv1.weight.requires_grad = False
-#kernel_weights = cornet.V1.conv1.weight
-#gabors = fit_gabors(kernel_weights)

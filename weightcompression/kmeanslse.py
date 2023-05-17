@@ -45,23 +45,6 @@ class KMeansLSE(torch.nn.Module):
     )
     return torch.abs(lse / self.beta)
 
-  def wcss(self,
-      x
-    ):
-    #distances = torch.cdist(x, self.centroids.clone().detach())
-    #mins      = torch.min(distances ** 2, dim = 1).values
-    #return mins.sum().item()
-    c = self.centroids.clone().detach()
-    dist_total = 0
-    print(c.shape)
-    for d in range(x.shape[0]):
-      dist = torch.sum((x[d] - c) ** 2, dim = 1)
-      dist_total += torch.min(dist).item()
-    return dist_total
-
-  def get_parameters(self):
-    return self.centroids.clone().detach()
-
 def cluster_train_step(
     model,              # k-Means model.
     points,             # NxD matrix. N data points in D dimensions.
