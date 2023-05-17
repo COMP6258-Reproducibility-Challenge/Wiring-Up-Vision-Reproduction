@@ -34,39 +34,67 @@ class KMeansLSE(torch.nn.Module):
   def forward(self,
       x # Input: NxD matrix. N data points in D dimensions.
     ):
-    squared_norm = torch.norm(
-      # Expand dimensions to perform an outer-product-esque subtraction.
-      # (Basically each point subtracted by each centroid.)
-      x[:, None, :] - self.centroids[None, :, :],
-      dim = 2
-    ) ** 2
-    lse = torch.logsumexp(self.beta * squared_norm, 1)
-    return lse / self.beta
-  
-def train_step(
-    model,    # k-Means model.
-    points,   # NxD matrix. N data points in D dimensions.
-    optimizer # Optimizer, from torch.optim.
+    x_expanded = x.unsqueeze(1)
+    c_expanded = self.centroids.unsqueeze(0)
+    lse = torch.logsumexp(
+      torch.sum(
+        (x_expanded - c_expanded) ** 2,
+        dim = 2
+        ) * self.beta,
+      dim = 1
+    )
+    return torch.abs(lse / self.beta)
+
+  def wcss(self,
+      x
+    ):
+    #distances = torch.cdist(x, self.centroids.clone().detach())
+    #mins      = torch.min(distances ** 2, dim = 1).values
+    #return mins.sum().item()
+    c = self.centroids.clone().detach()
+    dist_total = 0
+    print(c.shape)
+    for d in range(x.shape[0]):
+      dist = torch.sum((x[d] - c) ** 2, dim = 1)
+      dist_total += torch.min(dist).item()
+    return dist_total
+
+  def get_parameters(self):
+    return self.centroids.clone().detach()
+
+def cluster_train_step(
+    model,              # k-Means model.
+    points,             # NxD matrix. N data points in D dimensions.
+    optimizer,          # Optimizer, from torch.optim.
+    use_closure = False # Use closure, if needed.
   ):
-  output = model(points)
-  loss = torch.mean(output ** 2)
-  optimizer.zero_grad()
-  loss.backward()
-  optimizer.step()
+  def closure():
+    output = model(points)
+    loss = torch.mean(output)
+    optimizer.zero_grad()
+    loss.backward()
+    return loss
+  if use_closure:
+    loss = optimizer.step(closure)
+  else:
+    loss = closure()
+    optimizer.step()
   return loss.item()
 
 def cluster(
-    model,             # k-Means model.
-    points,            # NxD matrix. N data points in D dimensions.
-    optimizer,         # Optimizer, from torch.optim.
-    iterations = 1000, # Number of training iterations.
-    verbose = False    # Whether to print loss on each iteration.
+    model,               # k-Means model.
+    points,              # NxD matrix. N data points in D dimensions.
+    optimizer,           # Optimizer, from torch.optim.
+    iterations  = 1000,  # Number of training iterations.
+    use_closure = False, # Use closure, if needed.
+    verbose     = False  # Whether to print loss on each iteration.
   ):
   for i in range(iterations):
-    loss = train_step(model, points, optimizer)
+    loss = cluster_train_step(model, points, optimizer, use_closure)
     # Verbose will erase and rewrite the line to terminal. If this behavior
     # is *absolutely* necessary to remove, then remove 'end = ""'.
     if verbose:
       print("\rIter. ", i, ": Loss. ", loss, sep = "", end = "")
   if verbose:
     print()
+  return loss
